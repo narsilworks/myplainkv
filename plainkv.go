@@ -7,11 +7,17 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
+// PlainKV is a key-value database that uses
+// MySQL/MariaDB as its storage backend
 type PlainKV struct {
 	DSN       string // Data Source Name
 	db        *sql.DB
 	currBuckt string
 }
+
+const (
+	mimeBuckt string = `--mime--`
+)
 
 // NewPlainKV creates a new PlainKV object
 // This is the recommended method
@@ -53,32 +59,64 @@ func (p *PlainKV) Get(key string) ([]byte, error) {
 	return val, nil
 }
 
-// Set creates or updates the record by the value
-func (p *PlainKV) Set(key string, value []byte) error {
+// Get retrieves a record using a key
+func (p *PlainKV) GetMime(key string) (string, error) {
 
 	var (
 		err error
+		val []byte
 	)
 
+	val = make([]byte, 0)
+
 	if err = p.Open(); err != nil {
-		return err
+		return "", err
 	}
+
+	if err = p.db.QueryRow(`SELECT Value
+							FROM KeyValueTBL
+							WHERE Bucket=?
+								AND KeyID=?;`,
+		mimeBuckt,
+		key).Scan(&val); err != nil {
+
+		return string(val), err
+	}
+
+	if len(val) == 0 {
+		return "text/html", nil
+	}
+
+	return string(val), nil
+}
+
+// Set creates or updates the record by the value
+func (p *PlainKV) Set(key string, value []byte) error {
 
 	if p.currBuckt == "" {
 		p.currBuckt = "default"
 	}
 
-	if _, err = p.db.Exec(`INSERT INTO KeyValueTBL VALUES (?, ?, ?)
-							ON DUPLICATE KEY
-								UPDATE Value=?;`,
-		p.currBuckt,
-		key,
-		value,
-		value); err != nil {
+	if err := p.set(p.currBuckt, key, value); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// SetMime sets the mime of the value stored
+func (p *PlainKV) SetMime(key string, mime string) error {
+
+	if err := p.set(mimeBuckt, key, []byte(mime)); err != nil {
+		return err
+	}
+	return nil
+}
+
+// SetBucket sets the current bucket.
+// If set, all succeeding values will be retrieved and stored by the bucket name
+func (p *PlainKV) SetBucket(bucket string) {
+	p.currBuckt = bucket
 }
 
 // Del deletes a record with the provided key
@@ -107,12 +145,7 @@ func (p *PlainKV) Del(key string) error {
 	return nil
 }
 
-// SetBucket sets the current bucket
-func (p *PlainKV) SetBucket(bucket string) {
-	p.currBuckt = bucket
-}
-
-// Open a connection to the database
+// Open a connection to a MySQL database database
 func (p *PlainKV) Open() error {
 
 	if p.db == nil {
@@ -144,6 +177,30 @@ func (p *PlainKV) Open() error {
 func (p *PlainKV) Close() error {
 	if p.db != nil {
 		return p.db.Close()
+	}
+
+	return nil
+}
+
+// Set creates or updates the record by the value
+func (p *PlainKV) set(bucket, key string, value []byte) error {
+
+	var (
+		err error
+	)
+
+	if err = p.Open(); err != nil {
+		return err
+	}
+
+	if _, err = p.db.Exec(`INSERT INTO KeyValueTBL VALUES (?, ?, ?)
+							ON DUPLICATE KEY
+								UPDATE Value=?;`,
+		bucket,
+		key,
+		value,
+		value); err != nil {
+		return err
 	}
 
 	return nil
