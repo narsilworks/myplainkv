@@ -142,6 +142,14 @@ func (p *PlainKV) Del(key string) error {
 		return err
 	}
 
+	if _, err = p.db.Exec(`DELETE FROM KeyValueTBL
+							WHERE Bucket = ?
+								AND KeyID = ?;`,
+		mimeBuckt,
+		key); err != nil {
+		return err
+	}
+
 	return nil
 }
 
