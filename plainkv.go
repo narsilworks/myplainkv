@@ -145,6 +145,50 @@ func (p *PlainKV) Del(key string) error {
 	return nil
 }
 
+// ListKeys lists all keys containing the current pattern
+func (p *PlainKV) ListKeys(pattern string) ([]string, error) {
+	var (
+		err error
+		val []string
+		k   string
+	)
+
+	val = make([]string, 0)
+
+	if err = p.Open(); err != nil {
+		return val, err
+	}
+
+	if p.currBuckt == "" {
+		p.currBuckt = "default"
+	}
+
+	sqr, err := p.db.Query(`SELECT KeyID
+							FROM KeyValueTBL
+							WHERE Bucket=?
+								AND KeyID LIKE ?;`,
+		p.currBuckt,
+		pattern+"%")
+	if err != nil {
+		return val, err
+	}
+	defer sqr.Close()
+
+	for sqr.Next() {
+		if err = sqr.Scan(&k); err != nil {
+			return val, err
+		}
+
+		val = append(val, k)
+	}
+
+	if err = sqr.Err(); err != nil {
+		return val, err
+	}
+
+	return val, nil
+}
+
 // Open a connection to a MySQL database database
 func (p *PlainKV) Open() error {
 

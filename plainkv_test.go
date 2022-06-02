@@ -67,6 +67,33 @@ func TestOpenMime(t *testing.T) {
 	pkv.Close()
 }
 
+func TestOpenListKeys(t *testing.T) {
+
+	pkv := NewPlainKV("professor:FbsL3z7ehfrN@tcp(192.168.1.129)/kvdb")
+	if err := pkv.Open(); err != nil {
+		t.Logf(`%s`, err)
+		t.Fail()
+	}
+
+	strs, err := pkv.ListKeys("sample")
+	if err != nil {
+		t.Logf(`%s`, err)
+		t.Fail()
+	}
+
+	for _, v := range strs {
+		b, err := pkv.Get(v)
+		if err != nil {
+			t.Logf(`%s`, err)
+			t.Fail()
+		}
+
+		t.Logf(`Retrieved from the database: %s`, b)
+	}
+
+	pkv.Close()
+}
+
 func BenchmarkPerformance(b *testing.B) {
 
 	pkv := NewPlainKV("professor:FbsL3z7ehfrN@tcp(192.168.1.129)/kvdb")
