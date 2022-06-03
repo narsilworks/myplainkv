@@ -2,6 +2,7 @@ package plainkv
 
 import (
 	"database/sql"
+	"errors"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -243,6 +244,18 @@ func (p *PlainKV) set(bucket, key string, value []byte) error {
 
 	if err = p.Open(); err != nil {
 		return err
+	}
+
+	if len(bucket) > 50 {
+		return errors.New(`bucket id too long`)
+	}
+
+	if len(key) > 300 {
+		return errors.New(`key too long`)
+	}
+
+	if len(value) > 16777215 {
+		return errors.New(`value too large`)
 	}
 
 	if _, err = p.db.Exec(`INSERT INTO KeyValueTBL VALUES (?, ?, ?)
