@@ -217,7 +217,7 @@ func (p *PlainKV) Open() error {
 		p.db.Exec(`CREATE TABLE IF NOT EXISTS KeyValueTBL (
 						Bucket VARCHAR(50),
 						KeyID VARCHAR(300),
-						Value MEDIUMTEXT,
+						Value MEDIUMBLOB,
 						PRIMARY KEY (Bucket, KeyID)
 					);`)
 	}
