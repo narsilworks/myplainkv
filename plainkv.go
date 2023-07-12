@@ -50,11 +50,14 @@ func (p *PlainKV) get(bucket, key string) ([]byte, error) {
 		bucket = "default"
 	}
 
-	if err = p.db.QueryRow(`
+	err = p.db.QueryRow(`
 	SELECT Value FROM KeyValueTBL
 	WHERE Bucket=? AND KeyID=?;`,
-		bucket, key).Scan(&val); err != nil {
-		return val, err
+		bucket, key).Scan(&val)
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return val, err
+		}
 	}
 
 	return val, nil
@@ -197,7 +200,9 @@ func (p *PlainKV) ListKeys(pattern string) ([]string, error) {
 		p.currBuckt,
 		pattern+"%")
 	if err != nil {
-		return val, err
+		if !errors.Is(err, sql.ErrNoRows) {
+			return val, err
+		}
 	}
 	defer sqr.Close()
 
