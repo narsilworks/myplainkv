@@ -101,7 +101,7 @@ func TestIncrement(t *testing.T) {
 		t.Fail()
 	}
 
-	tally, err := pkv.Tally("sample")
+	tally, err := pkv.Tally("sample", 0)
 	if err != nil {
 		t.Logf(`%s`, err)
 		t.Fail()
@@ -128,7 +128,7 @@ func TestDecrement(t *testing.T) {
 		t.Fail()
 	}
 
-	tally, err := pkv.Tally("sample")
+	tally, err := pkv.Tally("sample", 0)
 	if err != nil {
 		t.Logf(`%s`, err)
 		t.Fail()

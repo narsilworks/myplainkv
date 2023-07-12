@@ -224,8 +224,10 @@ func (p *PlainKV) ListKeys(pattern string) ([]string, error) {
 	return val, nil
 }
 
-// Tally gets the current tally of a key. It automatically creates new key if it does not exist
-func (p *PlainKV) Tally(key string) (int, error) {
+// Tally gets the current tally of a key.
+// To start with a pre-defined number, set the offset variable
+// It automatically creates new key if it does not exist
+func (p *PlainKV) Tally(key string, offset int) (int, error) {
 	tk := fmt.Sprintf(tallyKey, key)
 	tlly, err := p.get(p.currBuckt, tk)
 	if err != nil {
@@ -233,7 +235,7 @@ func (p *PlainKV) Tally(key string) (int, error) {
 	}
 
 	if len(tlly) == 0 {
-		if err = p.set(p.currBuckt, tk, []byte("0")); err != nil {
+		if err = p.set(p.currBuckt, tk, []byte(strconv.Itoa(offset))); err != nil {
 			return -1, err
 		}
 	}
@@ -247,13 +249,15 @@ func (p *PlainKV) Tally(key string) (int, error) {
 // Incr increments the tally
 func (p *PlainKV) Incr(key string) (int, error) {
 
-	tlly, err := p.Tally(key)
+	tlly, err := p.Tally(key, 0)
 	if err != nil {
 		return tlly, err
 	}
-	nv := fmt.Sprintf(`%d`, tlly+1)
 	tk := fmt.Sprintf(tallyKey, key)
-	if err = p.set(p.currBuckt, tk, []byte(nv)); err != nil {
+	if err = p.set(
+		p.currBuckt,
+		tk,
+		[]byte(strconv.Itoa(tlly+1))); err != nil {
 		return tlly, err
 	}
 	return tlly + 1, nil
@@ -261,13 +265,15 @@ func (p *PlainKV) Incr(key string) (int, error) {
 
 // Decr decrements the tally
 func (p *PlainKV) Decr(key string) (int, error) {
-	tlly, err := p.Tally(key)
+	tlly, err := p.Tally(key, 0)
 	if err != nil {
 		return tlly, err
 	}
-	nv := fmt.Sprintf(`%d`, tlly-1)
 	tk := fmt.Sprintf(tallyKey, key)
-	if err = p.set(p.currBuckt, tk, []byte(nv)); err != nil {
+	if err = p.set(
+		p.currBuckt,
+		tk,
+		[]byte(strconv.Itoa(tlly-1))); err != nil {
 		return tlly, err
 	}
 	return tlly - 1, nil
