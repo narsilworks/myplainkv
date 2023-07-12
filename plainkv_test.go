@@ -94,6 +94,60 @@ func TestOpenListKeys(t *testing.T) {
 	pkv.Close()
 }
 
+func TestIncrement(t *testing.T) {
+	pkv := NewPlainKV("sample:password101@tcp(192.168.1.129)/kvdb", false)
+	if err := pkv.Open(); err != nil {
+		t.Logf(`%s`, err)
+		t.Fail()
+	}
+
+	tally, err := pkv.Tally("sample")
+	if err != nil {
+		t.Logf(`%s`, err)
+		t.Fail()
+	}
+	t.Logf(`Initial tally: %d`, tally)
+
+	for i := 0; i < 10; i++ {
+		tally, err := pkv.Incr("sample")
+		if err != nil {
+			t.Logf(`%s`, err)
+			t.Fail()
+		}
+
+		t.Logf(`Last tally: %d`, tally)
+	}
+
+	pkv.Close()
+}
+
+func TestDecrement(t *testing.T) {
+	pkv := NewPlainKV("sample:password101@tcp(192.168.1.129)/kvdb", false)
+	if err := pkv.Open(); err != nil {
+		t.Logf(`%s`, err)
+		t.Fail()
+	}
+
+	tally, err := pkv.Tally("sample")
+	if err != nil {
+		t.Logf(`%s`, err)
+		t.Fail()
+	}
+	t.Logf(`Initial tally: %d`, tally)
+
+	for i := 0; i < 10; i++ {
+		tally, err := pkv.Decr("sample")
+		if err != nil {
+			t.Logf(`%s`, err)
+			t.Fail()
+		}
+
+		t.Logf(`Last tally: %d`, tally)
+	}
+
+	pkv.Close()
+}
+
 func BenchmarkPerformance(b *testing.B) {
 
 	pkv := NewPlainKV("sample:password101@tcp(192.168.1.129)/kvdb", false)

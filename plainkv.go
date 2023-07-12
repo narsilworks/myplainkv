@@ -3,6 +3,8 @@ package plainkv
 import (
 	"database/sql"
 	"errors"
+	"fmt"
+	"strconv"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -19,6 +21,7 @@ type PlainKV struct {
 
 const (
 	mimeBuckt string = `--mime--`
+	tallyKey  string = `_______#tally-%s`
 )
 
 // NewPlainKV creates a new PlainKV object
@@ -219,6 +222,55 @@ func (p *PlainKV) ListKeys(pattern string) ([]string, error) {
 	}
 
 	return val, nil
+}
+
+// Tally gets the current tally of a key. It automatically creates new key if it does not exist
+func (p *PlainKV) Tally(key string) (int, error) {
+	tk := fmt.Sprintf(tallyKey, key)
+	tlly, err := p.get(p.currBuckt, tk)
+	if err != nil {
+		return -1, err
+	}
+
+	if len(tlly) == 0 {
+		if err = p.set(p.currBuckt, tk, []byte("0")); err != nil {
+			return -1, err
+		}
+	}
+
+	tv := string(tlly)
+	tvv, _ := strconv.Atoi(tv)
+
+	return tvv, nil
+}
+
+// Incr increments the tally
+func (p *PlainKV) Incr(key string) (int, error) {
+
+	tlly, err := p.Tally(key)
+	if err != nil {
+		return tlly, err
+	}
+	nv := fmt.Sprintf(`%d`, tlly+1)
+	tk := fmt.Sprintf(tallyKey, key)
+	if err = p.set(p.currBuckt, tk, []byte(nv)); err != nil {
+		return tlly, err
+	}
+	return tlly + 1, nil
+}
+
+// Decr decrements the tally
+func (p *PlainKV) Decr(key string) (int, error) {
+	tlly, err := p.Tally(key)
+	if err != nil {
+		return tlly, err
+	}
+	nv := fmt.Sprintf(`%d`, tlly-1)
+	tk := fmt.Sprintf(tallyKey, key)
+	if err = p.set(p.currBuckt, tk, []byte(nv)); err != nil {
+		return tlly, err
+	}
+	return tlly - 1, nil
 }
 
 // Open a connection to a MySQL database database
