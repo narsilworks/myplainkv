@@ -279,6 +279,18 @@ func (p *PlainKV) Decr(key string) (int, error) {
 	return tlly - 1, nil
 }
 
+// Reset resets tally to zero
+func (p *PlainKV) Reset(key string) error {
+	tk := fmt.Sprintf(tallyKey, key)
+	if err := p.set(
+		p.currBuckt,
+		tk,
+		[]byte("0")); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Open a connection to a MySQL database database
 func (p *PlainKV) Open() error {
 
