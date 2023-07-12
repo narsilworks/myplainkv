@@ -29,8 +29,7 @@ func NewPlainKV(dsn string) *PlainKV {
 	}
 }
 
-// Get retrieves a record using a key
-func (p *PlainKV) Get(key string) ([]byte, error) {
+func (p *PlainKV) get(bucket, key string) ([]byte, error) {
 
 	var (
 		err error
@@ -38,54 +37,70 @@ func (p *PlainKV) Get(key string) ([]byte, error) {
 	)
 
 	val = make([]byte, 0)
-
 	if err = p.Open(); err != nil {
 		return val, err
 	}
+	defer p.Close()
 
-	if p.currBuckt == "" {
-		p.currBuckt = "default"
+	if bucket == "" {
+		bucket = "default"
 	}
 
-	if err = p.db.QueryRow(`SELECT Value
-							FROM KeyValueTBL
-							WHERE Bucket=?
-								AND KeyID=?;`,
-		p.currBuckt,
-		key).Scan(&val); err != nil {
-
+	if err = p.db.QueryRow(`
+	SELECT Value FROM KeyValueTBL
+	WHERE Bucket=? AND KeyID=?;`,
+		bucket, key).Scan(&val); err != nil {
 		return val, err
 	}
 
 	return val, nil
 }
 
+// Set creates or updates the record by the value
+func (p *PlainKV) set(bucket, key string, value []byte) error {
+
+	var err error
+	if err = p.Open(); err != nil {
+		return err
+	}
+	defer p.Close()
+
+	if len(bucket) > 50 {
+		return errors.New(`bucket id too long`)
+	}
+
+	if len(key) > 300 {
+		return errors.New(`key too long`)
+	}
+
+	if len(value) > 16777215 {
+		return errors.New(`value too large`)
+	}
+
+	if _, err = p.db.Exec(`
+	INSERT INTO KeyValueTBL VALUES (?, ?, ?)
+	ON DUPLICATE KEY UPDATE Value=?;`,
+		bucket,
+		key,
+		value,
+		value); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Get retrieves a record using a key
+func (p *PlainKV) Get(key string) ([]byte, error) {
+	return p.get(p.currBuckt, key)
+}
+
 // Get retrieves a record using a key
 func (p *PlainKV) GetMime(key string) (string, error) {
 
-	var (
-		err error
-		val []byte
-	)
-
-	val = make([]byte, 0)
-
-	if err = p.Open(); err != nil {
-		return "", err
-	}
-
-	if err = p.db.QueryRow(`SELECT Value
-							FROM KeyValueTBL
-							WHERE Bucket=?
-								AND KeyID=?;`,
-		mimeBuckt,
-		key).Scan(&val); err != nil {
-
-		return string(val), err
-	}
-
-	if len(val) == 0 {
-		return "text/html", nil
+	val, err := p.get(mimeBuckt, key)
+	if err != nil || len(val) == 0 {
+		return "text/html", err
 	}
 
 	return string(val), nil
@@ -93,7 +108,6 @@ func (p *PlainKV) GetMime(key string) (string, error) {
 
 // Set creates or updates the record by the value
 func (p *PlainKV) Set(key string, value []byte) error {
-
 	if p.currBuckt == "" {
 		p.currBuckt = "default"
 	}
@@ -107,7 +121,6 @@ func (p *PlainKV) Set(key string, value []byte) error {
 
 // SetMime sets the mime of the value stored
 func (p *PlainKV) SetMime(key string, mime string) error {
-
 	if err := p.set(mimeBuckt, key, []byte(mime)); err != nil {
 		return err
 	}
@@ -123,29 +136,25 @@ func (p *PlainKV) SetBucket(bucket string) {
 // Del deletes a record with the provided key
 func (p *PlainKV) Del(key string) error {
 
-	var (
-		err error
-	)
-
+	var err error
 	if err = p.Open(); err != nil {
 		return err
 	}
+	defer p.Close()
 
 	if p.currBuckt == "" {
 		p.currBuckt = "default"
 	}
 
-	if _, err = p.db.Exec(`DELETE FROM KeyValueTBL
-							WHERE Bucket = ?
-								AND KeyID = ?;`,
+	if _, err = p.db.Exec(
+		`DELETE FROM KeyValueTBL WHERE Bucket = ? AND KeyID = ?;`,
 		p.currBuckt,
 		key); err != nil {
 		return err
 	}
 
-	if _, err = p.db.Exec(`DELETE FROM KeyValueTBL
-							WHERE Bucket = ?
-								AND KeyID = ?;`,
+	if _, err = p.db.Exec(
+		`DELETE FROM KeyValueTBL WHERE Bucket = ? AND KeyID = ?;`,
 		mimeBuckt,
 		key); err != nil {
 		return err
@@ -167,15 +176,14 @@ func (p *PlainKV) ListKeys(pattern string) ([]string, error) {
 	if err = p.Open(); err != nil {
 		return val, err
 	}
+	defer p.Close()
 
 	if p.currBuckt == "" {
 		p.currBuckt = "default"
 	}
 
-	sqr, err := p.db.Query(`SELECT KeyID
-							FROM KeyValueTBL
-							WHERE Bucket=?
-								AND KeyID LIKE ?;`,
+	sqr, err := p.db.Query(
+		`SELECT KeyID FROM KeyValueTBL WHERE Bucket=? AND KeyID LIKE ?;`,
 		p.currBuckt,
 		pattern+"%")
 	if err != nil {
@@ -215,12 +223,13 @@ func (p *PlainKV) Open() error {
 		p.db.SetMaxIdleConns(10)
 
 		// Check if table exists and create it if not
-		p.db.Exec(`CREATE TABLE IF NOT EXISTS KeyValueTBL (
-						Bucket VARCHAR(50),
-						KeyID VARCHAR(300),
-						Value MEDIUMBLOB,
-						PRIMARY KEY (Bucket, KeyID)
-					);`)
+		p.db.Exec(
+			`CREATE TABLE IF NOT EXISTS KeyValueTBL (
+				Bucket VARCHAR(50),
+				KeyID VARCHAR(300),
+				Value MEDIUMBLOB,
+				PRIMARY KEY (Bucket, KeyID)
+			);`)
 	}
 
 	return nil
@@ -230,42 +239,6 @@ func (p *PlainKV) Open() error {
 func (p *PlainKV) Close() error {
 	if p.db != nil {
 		return p.db.Close()
-	}
-
-	return nil
-}
-
-// Set creates or updates the record by the value
-func (p *PlainKV) set(bucket, key string, value []byte) error {
-
-	var (
-		err error
-	)
-
-	if err = p.Open(); err != nil {
-		return err
-	}
-
-	if len(bucket) > 50 {
-		return errors.New(`bucket id too long`)
-	}
-
-	if len(key) > 300 {
-		return errors.New(`key too long`)
-	}
-
-	if len(value) > 16777215 {
-		return errors.New(`value too large`)
-	}
-
-	if _, err = p.db.Exec(`INSERT INTO KeyValueTBL VALUES (?, ?, ?)
-							ON DUPLICATE KEY
-								UPDATE Value=?;`,
-		bucket,
-		key,
-		value,
-		value); err != nil {
-		return err
 	}
 
 	return nil
