@@ -14,6 +14,7 @@ type PlainKV struct {
 	DSN       string // Data Source Name
 	db        *sql.DB
 	currBuckt string
+	autoClose bool
 }
 
 const (
@@ -22,10 +23,11 @@ const (
 
 // NewPlainKV creates a new PlainKV object
 // This is the recommended method
-func NewPlainKV(dsn string) *PlainKV {
+func NewPlainKV(dsn string, autoClose bool) *PlainKV {
 	return &PlainKV{
 		DSN:       dsn,
 		currBuckt: `default`,
+		autoClose: autoClose,
 	}
 }
 
@@ -40,7 +42,9 @@ func (p *PlainKV) get(bucket, key string) ([]byte, error) {
 	if err = p.Open(); err != nil {
 		return val, err
 	}
-	defer p.Close()
+	if p.autoClose {
+		defer p.Close()
+	}
 
 	if bucket == "" {
 		bucket = "default"
@@ -63,7 +67,9 @@ func (p *PlainKV) set(bucket, key string, value []byte) error {
 	if err = p.Open(); err != nil {
 		return err
 	}
-	defer p.Close()
+	if p.autoClose {
+		defer p.Close()
+	}
 
 	if len(bucket) > 50 {
 		return errors.New(`bucket id too long`)
@@ -140,7 +146,9 @@ func (p *PlainKV) Del(key string) error {
 	if err = p.Open(); err != nil {
 		return err
 	}
-	defer p.Close()
+	if p.autoClose {
+		defer p.Close()
+	}
 
 	if p.currBuckt == "" {
 		p.currBuckt = "default"
@@ -176,7 +184,9 @@ func (p *PlainKV) ListKeys(pattern string) ([]string, error) {
 	if err = p.Open(); err != nil {
 		return val, err
 	}
-	defer p.Close()
+	if p.autoClose {
+		defer p.Close()
+	}
 
 	if p.currBuckt == "" {
 		p.currBuckt = "default"
@@ -238,7 +248,11 @@ func (p *PlainKV) Open() error {
 // Close closes the database
 func (p *PlainKV) Close() error {
 	if p.db != nil {
-		return p.db.Close()
+		if err := p.db.Close(); err != nil {
+			return err
+		}
+		p.db = nil
+		return nil
 	}
 
 	return nil

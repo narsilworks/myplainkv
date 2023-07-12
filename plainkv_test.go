@@ -7,7 +7,7 @@ import (
 
 func TestOpen(t *testing.T) {
 
-	pkv := NewPlainKV("sample:password101@tcp(192.168.1.129)/kvdb")
+	pkv := NewPlainKV("sample:password101@tcp(192.168.1.129)/kvdb", false)
 	if err := pkv.Open(); err != nil {
 		t.Logf(`%s`, err)
 		t.Fail()
@@ -37,7 +37,7 @@ func TestOpen(t *testing.T) {
 
 func TestOpenMime(t *testing.T) {
 
-	pkv := NewPlainKV("sample:password101@tcp(192.168.1.129)/kvdb")
+	pkv := NewPlainKV("sample:password101@tcp(192.168.1.129)/kvdb", false)
 	if err := pkv.Open(); err != nil {
 		t.Logf(`%s`, err)
 		t.Fail()
@@ -69,7 +69,7 @@ func TestOpenMime(t *testing.T) {
 
 func TestOpenListKeys(t *testing.T) {
 
-	pkv := NewPlainKV("sample:password101@tcp(192.168.1.129)/kvdb")
+	pkv := NewPlainKV("sample:password101@tcp(192.168.1.129)/kvdb", false)
 	if err := pkv.Open(); err != nil {
 		t.Logf(`%s`, err)
 		t.Fail()
@@ -96,7 +96,7 @@ func TestOpenListKeys(t *testing.T) {
 
 func BenchmarkPerformance(b *testing.B) {
 
-	pkv := NewPlainKV("sample:password101@tcp(192.168.1.129)/kvdb")
+	pkv := NewPlainKV("sample:password101@tcp(192.168.1.129)/kvdb", false)
 	if err := pkv.Open(); err != nil {
 		b.Logf(`%s`, err)
 		b.Fail()
