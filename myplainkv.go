@@ -13,7 +13,7 @@ import (
 
 // PlainKV is a key-value database that uses
 // MySQL/MariaDB as its storage backend
-type PlainKV struct {
+type MyPlainKV struct {
 	DSN       string // Data Source Name
 	db        *sql.DB
 	currBuckt string
@@ -27,15 +27,15 @@ const (
 
 // NewMyPlainKV creates a new MyPlainKV object
 // This is the recommended method
-func NewMyPlainKV(dsn string, autoClose bool) *PlainKV {
-	return &PlainKV{
+func NewMyPlainKV(dsn string, autoClose bool) *MyPlainKV {
+	return &MyPlainKV{
 		DSN:       dsn,
 		currBuckt: `default`,
 		autoClose: autoClose,
 	}
 }
 
-func (p *PlainKV) get(bucket, key string) ([]byte, error) {
+func (p *MyPlainKV) get(bucket, key string) ([]byte, error) {
 
 	var (
 		err error
@@ -68,7 +68,7 @@ func (p *PlainKV) get(bucket, key string) ([]byte, error) {
 }
 
 // Set creates or updates the record by the value
-func (p *PlainKV) set(bucket, key string, value []byte) error {
+func (p *MyPlainKV) set(bucket, key string, value []byte) error {
 
 	var err error
 	if err = p.Open(); err != nil {
@@ -104,12 +104,12 @@ func (p *PlainKV) set(bucket, key string, value []byte) error {
 }
 
 // Get retrieves a record using a key
-func (p *PlainKV) Get(key string) ([]byte, error) {
+func (p *MyPlainKV) Get(key string) ([]byte, error) {
 	return p.get(p.currBuckt, key)
 }
 
 // Get retrieves a record using a key
-func (p *PlainKV) GetMime(key string) (string, error) {
+func (p *MyPlainKV) GetMime(key string) (string, error) {
 
 	val, err := p.get(mimeBuckt, key)
 	if err != nil || len(val) == 0 {
@@ -120,7 +120,7 @@ func (p *PlainKV) GetMime(key string) (string, error) {
 }
 
 // Set creates or updates the record by the value
-func (p *PlainKV) Set(key string, value []byte) error {
+func (p *MyPlainKV) Set(key string, value []byte) error {
 	if p.currBuckt == "" {
 		p.currBuckt = "default"
 	}
@@ -133,7 +133,7 @@ func (p *PlainKV) Set(key string, value []byte) error {
 }
 
 // SetMime sets the mime of the value stored
-func (p *PlainKV) SetMime(key string, mime string) error {
+func (p *MyPlainKV) SetMime(key string, mime string) error {
 	if err := p.set(mimeBuckt, key, []byte(mime)); err != nil {
 		return err
 	}
@@ -142,12 +142,12 @@ func (p *PlainKV) SetMime(key string, mime string) error {
 
 // SetBucket sets the current bucket.
 // If set, all succeeding values will be retrieved and stored by the bucket name
-func (p *PlainKV) SetBucket(bucket string) {
+func (p *MyPlainKV) SetBucket(bucket string) {
 	p.currBuckt = bucket
 }
 
 // Del deletes a record with the provided key
-func (p *PlainKV) Del(key string) error {
+func (p *MyPlainKV) Del(key string) error {
 
 	var err error
 	if err = p.Open(); err != nil {
@@ -179,7 +179,7 @@ func (p *PlainKV) Del(key string) error {
 }
 
 // ListKeys lists all keys containing the current pattern
-func (p *PlainKV) ListKeys(pattern string) ([]string, error) {
+func (p *MyPlainKV) ListKeys(pattern string) ([]string, error) {
 	var (
 		err error
 		val []string
@@ -228,7 +228,7 @@ func (p *PlainKV) ListKeys(pattern string) ([]string, error) {
 // Tally gets the current tally of a key.
 // To start with a pre-defined number, set the offset variable
 // It automatically creates new key if it does not exist
-func (p *PlainKV) Tally(key string, offset int) (int, error) {
+func (p *MyPlainKV) Tally(key string, offset int) (int, error) {
 	tk := fmt.Sprintf(tallyKey, key)
 	tlly, err := p.get(p.currBuckt, tk)
 	if err != nil {
@@ -248,7 +248,7 @@ func (p *PlainKV) Tally(key string, offset int) (int, error) {
 }
 
 // Incr increments the tally
-func (p *PlainKV) TallyIncr(key string) (int, error) {
+func (p *MyPlainKV) TallyIncr(key string) (int, error) {
 
 	tlly, err := p.Tally(key, 0)
 	if err != nil {
@@ -265,7 +265,7 @@ func (p *PlainKV) TallyIncr(key string) (int, error) {
 }
 
 // Decr decrements the tally
-func (p *PlainKV) TallyDecr(key string) (int, error) {
+func (p *MyPlainKV) TallyDecr(key string) (int, error) {
 	tlly, err := p.Tally(key, 0)
 	if err != nil {
 		return tlly, err
@@ -281,7 +281,7 @@ func (p *PlainKV) TallyDecr(key string) (int, error) {
 }
 
 // Reset resets tally to zero
-func (p *PlainKV) TallyReset(key string) error {
+func (p *MyPlainKV) TallyReset(key string) error {
 	tk := fmt.Sprintf(tallyKey, key)
 	if err := p.set(
 		p.currBuckt,
@@ -293,7 +293,7 @@ func (p *PlainKV) TallyReset(key string) error {
 }
 
 // Open a connection to a MySQL database database
-func (p *PlainKV) Open() error {
+func (p *MyPlainKV) Open() error {
 
 	if p.db == nil {
 		var err error
@@ -322,7 +322,7 @@ func (p *PlainKV) Open() error {
 }
 
 // Close closes the database
-func (p *PlainKV) Close() error {
+func (p *MyPlainKV) Close() error {
 	if p.db != nil {
 		if err := p.db.Close(); err != nil {
 			return err
