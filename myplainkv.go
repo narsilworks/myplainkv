@@ -14,10 +14,13 @@ import (
 // PlainKV is a key-value database that uses
 // MySQL/MariaDB as its storage backend
 type MyPlainKV struct {
-	DSN       string // Data Source Name
-	db        *sql.DB
-	currBuckt string
-	autoClose bool
+	DSN           string // Data Source Name
+	db            *sql.DB
+	tx            *sql.Tx
+	currBuckt     string
+	defTableName  string
+	autoClose     bool
+	inTransaction bool
 }
 
 const (
@@ -25,13 +28,20 @@ const (
 	tallyKey  string = `_______#tally-%s`
 )
 
+var (
+	ErrBucketIdTooLong error = errors.New(`bucket id too long`)
+	ErrKeyTooLong      error = errors.New(`key too long`)
+	ErrValueTooLong    error = errors.New(`value too large`)
+)
+
 // NewMyPlainKV creates a new MyPlainKV object
 // This is the recommended method
 func NewMyPlainKV(dsn string, autoClose bool) *MyPlainKV {
 	return &MyPlainKV{
-		DSN:       dsn,
-		currBuckt: `default`,
-		autoClose: autoClose,
+		DSN:          dsn,
+		currBuckt:    `default`,
+		autoClose:    autoClose,
+		defTableName: `KeyValueTBL`,
 	}
 }
 
@@ -41,7 +51,6 @@ func (p *MyPlainKV) get(bucket, key string) ([]byte, error) {
 		err error
 		val []byte
 	)
-
 	val = make([]byte, 0)
 	if err = p.Open(); err != nil {
 		return val, err
@@ -49,57 +58,56 @@ func (p *MyPlainKV) get(bucket, key string) ([]byte, error) {
 	if p.autoClose {
 		defer p.Close()
 	}
-
 	if bucket == "" {
 		bucket = "default"
 	}
-
-	err = p.db.QueryRow(`
+	sqlstr := `
 	SELECT Value FROM KeyValueTBL
-	WHERE Bucket=? AND KeyID=?;`,
-		bucket, key).Scan(&val)
+	WHERE Bucket=? AND KeyID=?;`
+	if p.inTransaction {
+		err = p.tx.QueryRow(sqlstr, bucket, key).Scan(&val)
+	} else {
+		err = p.db.QueryRow(sqlstr, bucket, key).Scan(&val)
+	}
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return val, err
 		}
 	}
-
 	return val, nil
 }
 
 // Set creates or updates the record by the value
 func (p *MyPlainKV) set(bucket, key string, value []byte) error {
-
 	var err error
+
 	if err = p.Open(); err != nil {
 		return err
 	}
 	if p.autoClose {
 		defer p.Close()
 	}
-
 	if len(bucket) > 50 {
-		return errors.New(`bucket id too long`)
+		return ErrBucketIdTooLong
 	}
-
 	if len(key) > 300 {
-		return errors.New(`key too long`)
+		return ErrKeyTooLong
 	}
-
 	if len(value) > 16777215 {
-		return errors.New(`value too large`)
+		return ErrValueTooLong
 	}
 
-	if _, err = p.db.Exec(`
+	sqlstr := `
 	INSERT INTO KeyValueTBL VALUES (?, ?, ?)
-	ON DUPLICATE KEY UPDATE Value=?;`,
-		bucket,
-		key,
-		value,
-		value); err != nil {
+	ON DUPLICATE KEY UPDATE Value=?;`
+	if p.inTransaction {
+		_, err = p.tx.Exec(sqlstr, bucket, key, value)
+	} else {
+		_, err = p.db.Exec(sqlstr, bucket, key, value)
+	}
+	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -110,12 +118,10 @@ func (p *MyPlainKV) Get(key string) ([]byte, error) {
 
 // Get retrieves a record using a key
 func (p *MyPlainKV) GetMime(key string) (string, error) {
-
 	val, err := p.get(mimeBuckt, key)
 	if err != nil || len(val) == 0 {
 		return "text/html", err
 	}
-
 	return string(val), nil
 }
 
@@ -124,11 +130,9 @@ func (p *MyPlainKV) Set(key string, value []byte) error {
 	if p.currBuckt == "" {
 		p.currBuckt = "default"
 	}
-
 	if err := p.set(p.currBuckt, key, value); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -148,7 +152,6 @@ func (p *MyPlainKV) SetBucket(bucket string) {
 
 // Del deletes a record with the provided key
 func (p *MyPlainKV) Del(key string) error {
-
 	var err error
 	if err = p.Open(); err != nil {
 		return err
@@ -156,25 +159,27 @@ func (p *MyPlainKV) Del(key string) error {
 	if p.autoClose {
 		defer p.Close()
 	}
-
 	if p.currBuckt == "" {
 		p.currBuckt = "default"
 	}
+	sqlstr := `DELETE FROM ` + p.defTableName + ` WHERE Bucket = ? AND KeyID = ?;`
 
-	if _, err = p.db.Exec(
-		`DELETE FROM KeyValueTBL WHERE Bucket = ? AND KeyID = ?;`,
-		p.currBuckt,
-		key); err != nil {
-		return err
+	if p.inTransaction {
+		if _, err = p.tx.Exec(sqlstr, p.currBuckt, key); err != nil {
+			return err
+		}
+		if _, err = p.tx.Exec(sqlstr, mimeBuckt, key); err != nil {
+			return err
+		}
+		return nil
 	}
 
-	if _, err = p.db.Exec(
-		`DELETE FROM KeyValueTBL WHERE Bucket = ? AND KeyID = ?;`,
-		mimeBuckt,
-		key); err != nil {
+	if _, err = p.db.Exec(sqlstr, p.currBuckt, key); err != nil {
 		return err
 	}
-
+	if _, err = p.db.Exec(sqlstr, mimeBuckt, key); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -184,40 +189,37 @@ func (p *MyPlainKV) ListKeys(pattern string) ([]string, error) {
 		err error
 		val []string
 		k   string
+		sqr *sql.Rows
 	)
 
 	val = make([]string, 0)
-
 	if err = p.Open(); err != nil {
 		return val, err
 	}
 	if p.autoClose {
 		defer p.Close()
 	}
-
 	if p.currBuckt == "" {
 		p.currBuckt = "default"
 	}
-
-	sqr, err := p.db.Query(
-		`SELECT KeyID FROM KeyValueTBL WHERE Bucket=? AND KeyID LIKE ?;`,
-		p.currBuckt,
-		pattern+"%")
+	sqlstr := `SELECT KeyID FROM KeyValueTBL WHERE Bucket=? AND KeyID LIKE ?;`
+	if p.inTransaction {
+		sqr, err = p.tx.Query(sqlstr, p.currBuckt, pattern+"%")
+	} else {
+		sqr, err = p.db.Query(sqlstr, p.currBuckt, pattern+"%")
+	}
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return val, err
 		}
 	}
 	defer sqr.Close()
-
 	for sqr.Next() {
 		if err = sqr.Scan(&k); err != nil {
 			return val, err
 		}
-
 		val = append(val, k)
 	}
-
 	if err = sqr.Err(); err != nil {
 		return val, err
 	}
@@ -234,16 +236,13 @@ func (p *MyPlainKV) Tally(key string, offset int) (int, error) {
 	if err != nil {
 		return -1, err
 	}
-
 	if len(tlly) == 0 {
 		if err = p.set(p.currBuckt, tk, []byte(strconv.Itoa(offset))); err != nil {
 			return -1, err
 		}
 	}
-
 	tv := string(tlly)
 	tvv, _ := strconv.Atoi(tv)
-
 	return tvv, nil
 }
 
@@ -294,42 +293,76 @@ func (p *MyPlainKV) TallyReset(key string) error {
 
 // Open a connection to a MySQL database database
 func (p *MyPlainKV) Open() error {
-
-	if p.db == nil {
-		var err error
-
-		p.db, err = sql.Open("mysql", p.DSN)
-		if err != nil {
-			return err
-		}
-
-		// See "Important settings" section.
-		p.db.SetConnMaxLifetime(time.Minute * 3)
-		p.db.SetMaxOpenConns(10)
-		p.db.SetMaxIdleConns(10)
-
-		// Check if table exists and create it if not
-		p.db.Exec(
-			`CREATE TABLE IF NOT EXISTS KeyValueTBL (
-				Bucket VARCHAR(50),
-				KeyID VARCHAR(300),
-				Value MEDIUMBLOB,
-				PRIMARY KEY (Bucket, KeyID)
-			);`)
+	if p.db != nil {
+		return nil
 	}
+	var err error
+	p.inTransaction = false
+	p.db, err = sql.Open("mysql", p.DSN)
+	if err != nil {
+		return err
+	}
+	// See "Important settings" section.
+	p.db.SetConnMaxLifetime(time.Minute * 3)
+	p.db.SetMaxOpenConns(10)
+	p.db.SetMaxIdleConns(10)
 
+	// Check if table exists and create it if not
+	p.db.Exec(
+		`CREATE TABLE IF NOT EXISTS KeyValueTBL (
+			Bucket VARCHAR(50),
+			KeyID VARCHAR(300),
+			Value MEDIUMBLOB,
+			PRIMARY KEY (Bucket, KeyID)
+		);`)
+	return nil
+}
+
+// Begin a transaction
+func (p *MyPlainKV) Begin() error {
+	var err error
+	if p.tx, err = p.db.Begin(); err != nil {
+		return err
+	}
+	p.inTransaction = true
+	return nil
+}
+
+// Commit transaction
+func (p *MyPlainKV) Commit() error {
+	if p.tx == nil {
+		return nil // silently commit
+	}
+	if err := p.tx.Commit(); err != nil {
+		return err
+	}
+	p.inTransaction = false
+	return nil
+}
+
+// Rollback transaction
+func (p *MyPlainKV) Rollback() error {
+	if p.tx == nil {
+		return nil // silently rollback
+	}
+	if err := p.tx.Rollback(); err != nil {
+		return err
+	}
+	p.inTransaction = false
 	return nil
 }
 
 // Close closes the database
 func (p *MyPlainKV) Close() error {
-	if p.db != nil {
-		if err := p.db.Close(); err != nil {
-			return err
-		}
-		p.db = nil
+	if p.tx != nil {
+		p.tx = nil
+	}
+	if p.db == nil {
 		return nil
 	}
-
+	if err := p.db.Close(); err != nil {
+		return err
+	}
+	p.db = nil
 	return nil
 }
