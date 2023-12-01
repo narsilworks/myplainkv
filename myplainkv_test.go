@@ -1,4 +1,4 @@
-package plainkv
+package myplainkv
 
 import (
 	"strconv"
@@ -7,7 +7,7 @@ import (
 
 func TestOpen(t *testing.T) {
 
-	pkv := NewPlainKV("sample:password101@tcp(192.168.1.129)/kvdb", false)
+	pkv := NewMyPlainKV("sample:password101@tcp(192.168.1.129)/kvdb", false)
 	if err := pkv.Open(); err != nil {
 		t.Logf(`%s`, err)
 		t.Fail()
@@ -37,7 +37,7 @@ func TestOpen(t *testing.T) {
 
 func TestOpenMime(t *testing.T) {
 
-	pkv := NewPlainKV("sample:password101@tcp(192.168.1.129)/kvdb", false)
+	pkv := NewMyPlainKV("sample:password101@tcp(192.168.1.129)/kvdb", false)
 	if err := pkv.Open(); err != nil {
 		t.Logf(`%s`, err)
 		t.Fail()
@@ -69,7 +69,7 @@ func TestOpenMime(t *testing.T) {
 
 func TestOpenListKeys(t *testing.T) {
 
-	pkv := NewPlainKV("sample:password101@tcp(192.168.1.129)/kvdb", false)
+	pkv := NewMyPlainKV("sample:password101@tcp(192.168.1.129)/kvdb", false)
 	if err := pkv.Open(); err != nil {
 		t.Logf(`%s`, err)
 		t.Fail()
@@ -95,7 +95,7 @@ func TestOpenListKeys(t *testing.T) {
 }
 
 func TestIncrement(t *testing.T) {
-	pkv := NewPlainKV("sample:password101@tcp(192.168.1.129)/kvdb", false)
+	pkv := NewMyPlainKV("sample:password101@tcp(192.168.1.129)/kvdb", false)
 	if err := pkv.Open(); err != nil {
 		t.Logf(`%s`, err)
 		t.Fail()
@@ -109,7 +109,7 @@ func TestIncrement(t *testing.T) {
 	t.Logf(`Initial tally: %d`, tally)
 
 	for i := 0; i < 10; i++ {
-		tally, err := pkv.Incr("sample")
+		tally, err := pkv.TallyIncr("sample")
 		if err != nil {
 			t.Logf(`%s`, err)
 			t.Fail()
@@ -122,7 +122,7 @@ func TestIncrement(t *testing.T) {
 }
 
 func TestDecrement(t *testing.T) {
-	pkv := NewPlainKV("sample:password101@tcp(192.168.1.129)/kvdb", false)
+	pkv := NewMyPlainKV("sample:password101@tcp(192.168.1.129)/kvdb", false)
 	if err := pkv.Open(); err != nil {
 		t.Logf(`%s`, err)
 		t.Fail()
@@ -136,7 +136,7 @@ func TestDecrement(t *testing.T) {
 	t.Logf(`Initial tally: %d`, tally)
 
 	for i := 0; i < 10; i++ {
-		tally, err := pkv.Decr("sample")
+		tally, err := pkv.TallyDecr("sample")
 		if err != nil {
 			t.Logf(`%s`, err)
 			t.Fail()
@@ -150,7 +150,7 @@ func TestDecrement(t *testing.T) {
 
 func BenchmarkPerformance(b *testing.B) {
 
-	pkv := NewPlainKV("sample:password101@tcp(192.168.1.129)/kvdb", false)
+	pkv := NewMyPlainKV("sample:password101@tcp(192.168.1.129)/kvdb", false)
 	if err := pkv.Open(); err != nil {
 		b.Logf(`%s`, err)
 		b.Fail()

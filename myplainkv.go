@@ -1,4 +1,5 @@
-package plainkv
+// Package myplainkv is a package implementing PlainKVer using MySQL
+package myplainkv
 
 import (
 	"database/sql"
@@ -24,9 +25,9 @@ const (
 	tallyKey  string = `_______#tally-%s`
 )
 
-// NewPlainKV creates a new PlainKV object
+// NewMyPlainKV creates a new MyPlainKV object
 // This is the recommended method
-func NewPlainKV(dsn string, autoClose bool) *PlainKV {
+func NewMyPlainKV(dsn string, autoClose bool) *PlainKV {
 	return &PlainKV{
 		DSN:       dsn,
 		currBuckt: `default`,
@@ -247,7 +248,7 @@ func (p *PlainKV) Tally(key string, offset int) (int, error) {
 }
 
 // Incr increments the tally
-func (p *PlainKV) Incr(key string) (int, error) {
+func (p *PlainKV) TallyIncr(key string) (int, error) {
 
 	tlly, err := p.Tally(key, 0)
 	if err != nil {
@@ -264,7 +265,7 @@ func (p *PlainKV) Incr(key string) (int, error) {
 }
 
 // Decr decrements the tally
-func (p *PlainKV) Decr(key string) (int, error) {
+func (p *PlainKV) TallyDecr(key string) (int, error) {
 	tlly, err := p.Tally(key, 0)
 	if err != nil {
 		return tlly, err
@@ -280,7 +281,7 @@ func (p *PlainKV) Decr(key string) (int, error) {
 }
 
 // Reset resets tally to zero
-func (p *PlainKV) Reset(key string) error {
+func (p *PlainKV) TallyReset(key string) error {
 	tk := fmt.Sprintf(tallyKey, key)
 	if err := p.set(
 		p.currBuckt,
